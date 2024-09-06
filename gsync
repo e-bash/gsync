@@ -3,12 +3,12 @@
 # Функция для получения значения параметра из конфигурационного файла
 get_config_value() {
     local key="$1"
-    grep -oP "(?<=^$key=).*" "$config_file" | head -n 1
+    grep -oP "(?<=^$key=).*" "$config_file" | sed 's/#.*//' | head -n 1
 }
 
-# Функция для поиска всех .nogsync файлов и сбора их содержимого
+# Функция для поиска всех .nogsync файлов и сбора их содержимого, игнорируя комментарии
 generate_exclude_list() {
-    find "$source_dir" -name '.nogsync' -exec cat {} + | sort | uniq > "$exclude_file"
+    find "$source_dir" -name '.nogsync' -exec grep -v -e '^\s*$' -e '^\s*#' {} + | sed 's/#.*//' | awk '{$1=$1};1' | sort | uniq > "$exclude_file"
 }
 
 # Определение конфигурационного файла
@@ -23,14 +23,10 @@ for arg in "$@"; do
     fi
 done
 
-# Если конфигурационный файл не был найден в параметрах, ищем его в других местах
+# Если конфигурационный файл не был найден в параметрах, ищем его в домашней директории пользователя
 if [[ -z "$config_file" ]]; then
-    # Проверка наличия конфигурационного файла в домашней директории пользователя
     if [[ -f "$HOME/.gsync" ]]; then
         config_file="$HOME/.gsync"
-    # Проверка наличия конфигурационного файла в системной директории
-    elif [[ -f "/etc/gsync/gsync.conf" ]]; then
-        config_file="/etc/gsync/gsync.conf"
     else
         echo "Конфигурационный файл не найден. Завершение работы."
         exit 1
