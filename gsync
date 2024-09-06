@@ -1,0 +1,115 @@
+#!/bin/bash
+
+# Функция для получения значения параметра из конфигурационного файла
+get_config_value() {
+    local key="$1"
+    grep -oP "(?<=^$key=).*" "$config_file" | head -n 1
+}
+
+# Функция для поиска всех .nogsync файлов и сбора их содержимого
+generate_exclude_list() {
+    find "$source_dir" -name '.nogsync' -exec cat {} + | sort | uniq > "$exclude_file"
+}
+
+# Определение конфигурационного файла
+config_file=""
+exclude_file=$(mktemp)
+
+# Проверка параметров командной строки
+for arg in "$@"; do
+    if [[ $arg == --config=* ]]; then
+        config_file="${arg#--config=}"
+        break
+    fi
+done
+
+# Если конфигурационный файл не был найден в параметрах, ищем его в других местах
+if [[ -z "$config_file" ]]; then
+    # Проверка наличия конфигурационного файла в домашней директории пользователя
+    if [[ -f "$HOME/.gsync" ]]; then
+        config_file="$HOME/.gsync"
+    # Проверка наличия конфигурационного файла в системной директории
+    elif [[ -f "/etc/gsync/gsync.conf" ]]; then
+        config_file="/etc/gsync/gsync.conf"
+    else
+        echo "Конфигурационный файл не найден. Завершение работы."
+        exit 1
+    fi
+fi
+
+# Проверка доступности конфигурационного файла
+if [[ ! -f "$config_file" ]]; then
+    echo "Конфигурационный файл $config_file не существует или к нему нет доступа."
+    exit 1
+fi
+
+# Чтение параметров из конфигурационного файла
+source_dir=$(get_config_value "source")
+target_dir=$(get_config_value "target")
+links=$(get_config_value "links")
+perms=$(get_config_value "perms")
+times=$(get_config_value "times")
+group=$(get_config_value "group")
+owner=$(get_config_value "owner")
+
+# Проверка наличия обязательных параметров
+if [[ -z "$source_dir" || -z "$target_dir" ]]; then
+    echo "Параметры 'source' и/или 'target' не указаны в конфигурационном файле."
+    exit 1
+fi
+
+# Генерация списка исключений
+generate_exclude_list
+
+# Формирование параметров для rsync
+rsync_opts="-avz --delete"
+
+if [[ "$links" == "true" ]]; then
+    rsync_opts+=" --links"
+fi
+
+if [[ "$perms" == "true" ]]; then
+    rsync_opts+=" --perms"
+fi
+
+if [[ "$times" == "true" ]]; then
+    rsync_opts+=" --times"
+fi
+
+if [[ "$group" == "true" ]]; then
+    rsync_opts+=" --group"
+fi
+
+if [[ "$owner" == "true" ]]; then
+    rsync_opts+=" --owner"
+fi
+
+# Проверка необходимости использования SSH
+if [[ "$target_dir" == *@* ]]; then
+    rsync_opts+=" -e ssh"
+fi
+
+# Добавление параметра для исключений, если файл с исключениями существует
+if [[ -s "$exclude_file" ]]; then
+    rsync_opts+=" --exclude-from=$exclude_file"
+fi
+
+# Функция для синхронизации с использованием rsync
+sync_files() {
+    inotifywait -m -r -e modify,create,delete,move "$source_dir" --format '%w%f' | while read -r file; do
+        echo "Изменен файл $file. Обновление списка исключений и запуск rsync..."
+        
+        # Обновление списка исключений при изменении .nogsync файлов
+        if [[ "$file" == *.nogsync ]]; then
+            generate_exclude_list
+        fi
+        
+        rsync $rsync_opts "$source_dir" "$target_dir"
+    done
+}
+
+# Запуск функции синхронизации
+sync_files
+
+# Удаление временного файла с исключениями
+rm -f "$exclude_file"
