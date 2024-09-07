@@ -245,17 +245,17 @@ sudo systemctl start gsync
 
 1. Установите Supervisor:
 
-   - **Ubuntu/Debian:**
+**Ubuntu/Debian:**
 
-   ```bash
-   sudo apt install supervisor
-   ```
+```bash
+sudo apt install supervisor
+```
 
-   - **CentOS/RHEL:**
+**CentOS/RHEL:**
 
-   ```bash
-   sudo yum install supervisor
-   ```
+```bash
+sudo yum install supervisor
+```
 
 2. Создайте конфигурационный файл для `gsync`:
 
