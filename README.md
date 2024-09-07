@@ -261,9 +261,7 @@ sudo systemctl start gsync
 
 ```bash
 sudo nano /etc/supervisor/conf.d/gsync.conf
-``
-
-`
+```
 
 3. Добавьте следующее содержимое:
 
